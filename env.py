@@ -39,7 +39,7 @@ PLAYER_MASK_VALUE = 255
 OBSTACLE_MASK_VALUE = 128
 
 # 獎勵設定
-REWARD_SURVIVAL = 0.01 
+REWARD_SURVIVAL = 0.01
 REWARD_SCORE = 1.0
 REWARD_POSSIBLE_SCORE = 0 #unable
 REWARD_DEATH = -1.0
@@ -556,14 +556,14 @@ class PcGameEnv(gym.Env):
             score_reward += REWARD_POSSIBLE_SCORE
             self.possible_is_rewarded = True
 
-        reward = (REWARD_SURVIVAL / self.frame_skip) + score_reward
+        reward = score_reward
         if status == "Dead":
             reward += REWARD_DEATH
 
         return reward
 
     def step(self, action):
-        total_reward = 0.0
+        total_reward = REWARD_SURVIVAL
         terminated = False
         truncated = False
 
@@ -578,7 +578,7 @@ class PcGameEnv(gym.Env):
                 )
 
             status = self._check_game_status(sct_img)
-            terminated = status == "Dead" or status == "Unknown"
+            terminated = status == "Dead"
             truncated = status == "Timeout"
             # if terminated or truncated:
             # print(time.time() - self.game_start_time)
