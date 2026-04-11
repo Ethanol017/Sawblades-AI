@@ -408,10 +408,11 @@ class PcGameEnv(gym.Env):
 
     def _process_obs(self, sct_img):
         """
-        處理觀察值: 轉灰階 + 顏色語意遮罩 -> Resize (84x84) -> 回傳 uint8 (2,84,84)
+        處理觀察值: 轉灰階(反轉) + 顏色語意遮罩 -> Resize (84x84) -> 回傳 uint8 (2,84,84)
         """
         img = np.array(sct_img)
         gray = cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY)
+        gray = 255 - gray  # 反轉顏色：遊戲中是白底黑圖，反轉後變黑底白圖更適合 CNN 學習邊緣等特徵。
         rgb = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
 
         semantic_mask = self._build_semantic_mask(rgb)
