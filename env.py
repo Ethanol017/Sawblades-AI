@@ -19,13 +19,13 @@ WINDOW_SETTINGS = {
 }
 
 # 遊戲畫面區域 (螢幕座標；假設視窗固定在 WINDOW_SETTINGS x/y)
-GAME_ROI = {"top": 100, "left": 170, "width": 460, "height": 630}
+GAME_ROI = {"top": 101, "left": 170, "width": 460, "height": 626}
 
 # 分數顯示區域
-SCORE_ROI = {"top": 100, "left": 310, "width": 200, "height": 70}
+SCORE_ROI = {"top": 101, "left": 310, "width": 200, "height": 70}
 
 # 遊戲開始/結束檢測區域 (畫面中央的小區域)
-START_CHECK_ROI = {"top": 100, "left": 170, "width": 460, "height": 200}
+START_CHECK_ROI = {"top": 101, "left": 170, "width": 460, "height": 200}
 
 # 閾值設定
 WHITE_THRESHOLD = 200  # 判定畫面變白的亮度 (Playing)
