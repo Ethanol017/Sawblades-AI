@@ -117,6 +117,13 @@ def soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
             target_param.data.mul_(1.0 - tau).add_(source_param.data, alpha=tau)
 
 
+def compute_linear_epsilon(step: int) -> float:
+    decay_end_ratio = EPSILON_DECAY_END_PERCENT / 100.0
+    decay_end_step = max(1, int(MAX_STEPS * decay_end_ratio))
+    progress = min(max(step, 0), decay_end_step) / decay_end_step
+    return EPSILON_START + (EPSILON_END - EPSILON_START) * progress
+
+
 def save_replay_buffer(buffer: ReplayBuffer, buffer_path: str) -> None:
     tmp_path = buffer_path + ".tmp"
     try:
@@ -233,7 +240,7 @@ def main():
                 target_net.load_state_dict(checkpoint["model_state_dict"])
                 optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
                 steps_done = checkpoint.get("steps_done", 0)
-                epsilon = checkpoint.get("epsilon", EPSILON_START)
+                epsilon = compute_linear_epsilon(steps_done)
             except RuntimeError as e:
                 print(
                     "Checkpoint load failed, likely due to input channel mismatch. "
@@ -394,13 +401,8 @@ def main():
                         "Action/batch_actions", act_batch.detach().cpu().numpy(), step
                     )
 
-            # Update Epsilon (Exponential Decay)
-            if step >= EPSILON_START_STEPS:
-                epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * np.exp(
-                    -1.0 * (step - EPSILON_START_STEPS) / EPSILON_DECAY
-                )
-            else:
-                epsilon = EPSILON_START
+            # Update Epsilon (Linear Decay)
+            epsilon = compute_linear_epsilon(step)
 
             if step % LOG_INTERVAL == 0:
                 writer.add_scalar("Epsilon", epsilon, step)
