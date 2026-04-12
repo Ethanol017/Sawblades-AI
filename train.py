@@ -169,6 +169,19 @@ def load_replay_buffer(
 
     return loaded_buffer
 
+def save_checkpoint(model: nn.Module, optimizer: optim.Optimizer, step: int, epsilon: float, model_input_shape: tuple, per_frame_channels: int) -> None:
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "steps_done": step,
+            "epsilon": epsilon,
+            "model_input_shape": model_input_shape,
+            "frame_stack": FRAMES_STACK,
+            "per_frame_channels": int(per_frame_channels),
+        },
+        CHECKPOINT_PATH + f"_{step}.pth",
+    )
 
 def main():
     try:
@@ -434,56 +447,25 @@ def main():
 
                 if need_save:
                     need_save = False
-                    torch.save(
-                        {
-                            "model_state_dict": policy_net.state_dict(),
-                            "optimizer_state_dict": optimizer.state_dict(),
-                            "steps_done": step,
-                            "epsilon": epsilon,
-                            "model_input_shape": model_input_shape,
-                            "frame_stack": FRAMES_STACK,
-                            "per_frame_channels": int(per_frame_channels),
-                        },
-                        CHECKPOINT_PATH + f"_{step}.pth",
-                    )
+                    save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
                     save_replay_buffer(buffer, BUFFER_PATH)
 
                 obs, _ = env.reset()
                 episode_reward = 0
                 episode_len = 0
+        # Final save after training loop
+        save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
 
     except KeyboardInterrupt:
         print("Training interrupted. Saving checkpoint and replay buffer...")
-        torch.save(
-            {
-                "model_state_dict": policy_net.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "steps_done": step,
-                "epsilon": epsilon,
-                "model_input_shape": model_input_shape,
-                "frame_stack": FRAMES_STACK,
-                "per_frame_channels": int(per_frame_channels),
-            },
-            CHECKPOINT_PATH,
-        )
+        save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
         save_replay_buffer(buffer, BUFFER_PATH)
         writer.close()
         env.close()
     except Exception as e:
         print(f"An error occurred: {e}")
         print("Saving checkpoint and replay buffer before exit...")
-        torch.save(
-            {
-                "model_state_dict": policy_net.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "steps_done": step,
-                "epsilon": epsilon,
-                "model_input_shape": model_input_shape,
-                "frame_stack": FRAMES_STACK,
-                "per_frame_channels": int(per_frame_channels),
-            },
-            CHECKPOINT_PATH,
-        )
+        save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
         save_replay_buffer(buffer, BUFFER_PATH)
         writer.close()
         env.close()
