@@ -180,7 +180,14 @@ def sanitize_replay_buffer_actions(buffer: ReplayBuffer, num_actions: int) -> in
         used_actions[invalid_mask] = 0
     return invalid_count
 
-def save_checkpoint(model: nn.Module, optimizer: optim.Optimizer, step: int, epsilon: float, model_input_shape: tuple, per_frame_channels: int) -> None:
+def save_checkpoint(
+    model: nn.Module,
+    optimizer: optim.Optimizer,
+    step: int,
+    epsilon: float,
+    model_input_shape: tuple,
+    per_frame_channels: int,
+) -> None:
     torch.save(
         {
             "model_state_dict": model.state_dict(),
@@ -248,9 +255,9 @@ def main():
     steps_done = 0
 
     # Load checkpoint if exists
-    if RESUME_TRAINING and os.path.exists(CHECKPOINT_PATH):
-        print(f"Loading checkpoint from {CHECKPOINT_PATH}")
-        checkpoint = torch.load(CHECKPOINT_PATH, weights_only=False)
+    if RESUME_TRAINING and os.path.exists(RESUME_CHECKPOINT_PATH):
+        print(f"Loading checkpoint from {RESUME_CHECKPOINT_PATH}")
+        checkpoint = torch.load(RESUME_CHECKPOINT_PATH, weights_only=False)
         checkpoint_input_shape = tuple(checkpoint.get("model_input_shape", ()))
         if checkpoint_input_shape and checkpoint_input_shape != model_input_shape:
             print(
