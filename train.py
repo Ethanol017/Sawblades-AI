@@ -169,6 +169,17 @@ def load_replay_buffer(
 
     return loaded_buffer
 
+def sanitize_replay_buffer_actions(buffer: ReplayBuffer, num_actions: int) -> int:
+    if buffer.action is None or buffer.num_in_buffer <= 0:
+        return 0
+
+    used_actions = buffer.action[: buffer.num_in_buffer]
+    invalid_mask = (used_actions < 0) | (used_actions >= int(num_actions))
+    invalid_count = int(np.count_nonzero(invalid_mask))
+    if invalid_count > 0:
+        used_actions[invalid_mask] = 0
+    return invalid_count
+
 def save_checkpoint(model: nn.Module, optimizer: optim.Optimizer, step: int, epsilon: float, model_input_shape: tuple, per_frame_channels: int) -> None:
     torch.save(
         {
@@ -270,6 +281,14 @@ def main():
                     expected_frame_history_len=FRAMES_STACK,
                 )
                 print(f"Replay buffer restored (size={len(buffer)})")
+                invalid_action_count = sanitize_replay_buffer_actions(
+                    buffer, env.action_space.n
+                )
+                if invalid_action_count > 0:
+                    print(
+                        "Replay buffer had invalid actions and was sanitized "
+                        f"(count={invalid_action_count}, action_space_n={env.action_space.n})."
+                    )
             except Exception as e:
                 print(
                     "Replay buffer load failed, start with empty buffer. " f"Error: {e}"

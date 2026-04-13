@@ -179,6 +179,11 @@ class ReplayBuffer(object):
             self.done = np.empty([self.size], dtype=np.bool_)
 
         self.obs[self.next_idx] = frame
+        # Initialize transition fields for this slot to safe defaults.
+        # If interruption happens before store_effect, we won't leave garbage action values.
+        self.action[self.next_idx] = 0
+        self.reward[self.next_idx] = 0.0
+        self.done[self.next_idx] = False
 
         ret = self.next_idx
         self.next_idx = (self.next_idx + 1) % self.size
