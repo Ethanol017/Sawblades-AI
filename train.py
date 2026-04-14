@@ -336,6 +336,7 @@ def main():
     print("Starting training...")
     obs, _ = env.reset()
     episode_reward = 0
+    episode_score_reward = 0
     episode_len = 0
     need_save = False
     last_idx = 0
@@ -389,6 +390,7 @@ def main():
             # 2. Step
             next_obs, reward, terminated, truncated, info = env.step(action)
             episode_reward += reward
+            episode_score_reward += info.get("score_reward", 0)
             episode_len += 1
 
             # 3. Push to Buffer
@@ -514,6 +516,7 @@ def main():
                     f"Step: {step}, Episode Reward: {episode_reward:.2f}, Epsilon: {epsilon:.2f}"
                 )
                 writer.add_scalar("Reward/episode", episode_reward, step)
+                writer.add_scalar("Reward/episode_score", episode_score_reward, step)
                 writer.add_scalar("Episode/len", episode_len, step)
                 if episode_len > 0:
                     writer.add_scalar(

@@ -40,8 +40,9 @@ OBSTACLE_MASK_VALUE = 128
 
 # 獎勵設定
 REWARD_SURVIVAL = 0.01
+REWARD_SURVIVAL_PER_TIME = 0.004
 REWARD_SCORE = 1.0
-REWARD_POSSIBLE_SCORE = 0 #unable
+REWARD_POSSIBLE_SCORE = 0.2
 REWARD_DEATH = -1.0
 MAX_RESET_RETRIES = 30
 
@@ -152,6 +153,8 @@ class PcGameEnv(gym.Env):
         # Action Repetition
         self.frame_skip = 4
         
+        self.survival_step = 0
+        
         if target_train_step_time_sec is None:
             self.target_train_step_time_sec = None
         else:
@@ -165,7 +168,6 @@ class PcGameEnv(gym.Env):
         self._init_memory_reader()
         self.last_score = 0.0
         self.possible_get_score = False
-        self.possible_is_rewarded = False
 
         self.game_start_time = time.time()
 
@@ -460,9 +462,6 @@ class PcGameEnv(gym.Env):
         _mask = cv2.inRange(_rgb, _lower, _upper)
         self.possible_get_score = bool(np.any(_mask))
 
-        if not self.possible_get_score:
-            self.possible_is_rewarded = False
-
         start_slice = img[
             rel_top : rel_top + START_CHECK_ROI["height"],
             rel_left : rel_left + START_CHECK_ROI["width"],
@@ -558,25 +557,40 @@ class PcGameEnv(gym.Env):
         except Exception:
             return 0
 
-    def _calculate_reward(self, status):
+    def _calculate_reward(self, status , is_first_frame):
+        """
+        計算本 step 的 reward，包含生存獎勵、分數獎勵、可能得分獎勵、死亡懲罰等。
+        Args:
+            status (str): The current game status.
+            is_first_frame (bool): Whether the current frame is the first frame of the step.
+        Returns:
+            reward (float): The total reward for this step.
+            score_reward (float): The portion of the reward that comes from scoring, for info logging.
+        """
+        
+        reward = 0.0
         score_reward = 0.0
         score = self.get_score_from_memory()
+        if is_first_frame:
+            reward += REWARD_SURVIVAL + REWARD_SURVIVAL_PER_TIME * min(self.survival_step, 200)
+        
         if score > self.last_score:
             score_reward = (score - self.last_score) * REWARD_SCORE
+            reward += score_reward
             self.last_score = score
+            self.possible_get_score = False
 
-        if self.possible_get_score and not self.possible_is_rewarded:
-            score_reward += REWARD_POSSIBLE_SCORE
-            self.possible_is_rewarded = True
+        if is_first_frame and self.possible_get_score:
+            reward += REWARD_POSSIBLE_SCORE
 
-        reward = score_reward
         if status == "Dead":
             reward += REWARD_DEATH
 
-        return reward
+        return reward , score_reward
 
     def step(self, action):
-        total_reward = REWARD_SURVIVAL
+        self.survival_step += 1
+        total_reward = 0
         terminated = False
         truncated = False
 
@@ -599,7 +613,7 @@ class PcGameEnv(gym.Env):
             # img = np.array(sct_img)
             # cv2.imwrite(f"debug_picture/debug_game_over{int(time.time())}.png", img)
 
-            step_reward = self._calculate_reward(status)
+            step_reward , score_reward = self._calculate_reward(status, frame_idx == 0)
             total_reward += step_reward
 
             # time.sleep(0.004)
@@ -608,7 +622,7 @@ class PcGameEnv(gym.Env):
                 break
 
         obs = self._process_obs(sct_img)
-        return obs, total_reward, terminated, truncated, {}
+        return obs, total_reward, terminated, truncated, {"score_reward": score_reward}
 
     def _release_all_keys(self):
         self._key_up("left")
@@ -619,6 +633,8 @@ class PcGameEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.last_score = 0.0
+        self.survival_step = 0
+        self.possible_get_score = False
 
         self._release_all_keys()
 
@@ -679,7 +695,7 @@ if __name__ == "__main__":
     obs, info = env.reset()
     for _ in range(400):
         action = env.action_space.sample()
-        obs, reward, terminated, truncated, info = env.step(action)
+        obs, reward, terminated, truncated, info = env.step(0) # 0 is for human testing
         # save obs to image file for debugging; only need one image.
         debug_img = np.concatenate([obs[0], obs[1]], axis=1)
         cv2.imwrite("debug_picture/debug_obs.png", debug_img)
