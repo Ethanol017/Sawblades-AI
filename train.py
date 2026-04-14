@@ -39,6 +39,8 @@ SAVE_INTERVAL = 20000
 # environment window behavior
 ENV_AUTO_RESIZE_WINDOW = True
 ENV_AUTO_ACTIVATE_WINDOW = False
+ENV_TARGET_TRAIN_STEP_TIME_SEC = 0.12
+STEP_PACING_SPIN_THRESHOLD_SEC = 0.002
 # for logging
 LOG_INTERVAL = 100
 HIST_INTERVAL = 1000
@@ -124,6 +126,22 @@ def compute_linear_epsilon(step: int) -> float:
     return EPSILON_START + (EPSILON_END - EPSILON_START) * progress
 
 
+def wait_until_precise(deadline: float, spin_threshold_sec: float) -> None:
+    """Wait until deadline with better precision than plain time.sleep on Windows."""
+    while True:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0.0:
+            return
+        if remaining > spin_threshold_sec:
+            # Keep a short tail for spin wait to avoid large sleep overshoot.
+            time.sleep(remaining - spin_threshold_sec)
+            continue
+        break
+
+    while time.perf_counter() < deadline:
+        pass
+
+
 def save_replay_buffer(buffer: ReplayBuffer, buffer_path: str) -> None:
     tmp_path = buffer_path + ".tmp"
     try:
@@ -206,10 +224,19 @@ def main():
         env = PcGameEnv(
             auto_resize_window=ENV_AUTO_RESIZE_WINDOW,
             auto_activate_window=ENV_AUTO_ACTIVATE_WINDOW,
+            target_train_step_time_sec=ENV_TARGET_TRAIN_STEP_TIME_SEC,
         )
     except Exception as e:
         print(f"Failed to initialize environment: {e}")
         return
+
+    if env.target_train_step_time_sec is None:
+        print("Train step pacing: disabled")
+    else:
+        print(
+            "Train step pacing target: "
+            f"{env.target_train_step_time_sec:.3f}s (spin_tail={STEP_PACING_SPIN_THRESHOLD_SEC:.3f}s)"
+        )
 
     obs_shape = env.observation_space.shape
     if len(obs_shape) == 2:
@@ -316,7 +343,7 @@ def main():
 
     try:
         for step in range(steps_done, MAX_STEPS):
-            t1 = time.time()
+            step_start = time.perf_counter()
 
             # store_frame expects (H,W,C); convert from env output format.
             if obs.ndim == 2:
@@ -450,8 +477,31 @@ def main():
             if (not USE_SOFT_UPDATE) and (step % TARGET_UPDATE == 0):
                 target_net.load_state_dict(policy_net.state_dict())
 
-            t2 = time.time()
-            writer.add_scalar("Time/step_time", t2 - t1, step)
+            step_time_raw = time.perf_counter() - step_start
+            step_sleep = 0.0
+            target_step_time = env.target_train_step_time_sec
+            ideal_sleep = 0.0
+            if target_step_time is not None:
+                ideal_sleep = max(0.0, target_step_time - step_time_raw)
+                if ideal_sleep > 0.0:
+                    wait_until_precise(
+                        step_start + target_step_time,
+                        STEP_PACING_SPIN_THRESHOLD_SEC,
+                    )
+
+            step_time = time.perf_counter() - step_start
+            step_sleep = max(0.0, step_time - step_time_raw)
+            step_wait_overshoot = max(0.0, step_sleep - ideal_sleep)
+            step_over_target = (
+                max(0.0, step_time - target_step_time)
+                if target_step_time is not None
+                else 0.0
+            )
+            writer.add_scalar("Time/step_time", step_time, step)
+            writer.add_scalar("Time/step_time_raw", step_time_raw, step)
+            writer.add_scalar("Time/step_sleep", step_sleep, step)
+            writer.add_scalar("Time/step_wait_overshoot", step_wait_overshoot, step)
+            writer.add_scalar("Time/step_over_target", step_over_target, step)
 
             if step > 0 and step % SAVE_INTERVAL == 0:
                 save_replay_buffer(buffer, BUFFER_PATH)

@@ -117,7 +117,12 @@ def resize_game_window(activate=True):
 class PcGameEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 10}
 
-    def __init__(self, auto_resize_window=True, auto_activate_window=False):
+    def __init__(
+        self,
+        auto_resize_window=True,
+        auto_activate_window=False,
+        target_train_step_time_sec=0.15,
+    ):
         super(PcGameEnv, self).__init__()
 
         self.game_window = None
@@ -146,6 +151,14 @@ class PcGameEnv(gym.Env):
 
         # Action Repetition
         self.frame_skip = 4
+        
+        if target_train_step_time_sec is None:
+            self.target_train_step_time_sec = None
+        else:
+            target_train_step_time_sec = float(target_train_step_time_sec)
+            if target_train_step_time_sec <= 0.0:
+                raise ValueError("target_train_step_time_sec must be > 0 or None")
+            self.target_train_step_time_sec = target_train_step_time_sec
 
         # score
         self.pm = None
@@ -589,7 +602,7 @@ class PcGameEnv(gym.Env):
             step_reward = self._calculate_reward(status)
             total_reward += step_reward
 
-            time.sleep(0.004)
+            # time.sleep(0.004)
 
             if terminated or truncated:
                 break
