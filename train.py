@@ -32,8 +32,10 @@ FRAMES_STACK = 4
 # for saving/loading model
 CHECKPOINT_DIR = "checkpoints"
 CHECKPOINT_PATH = CHECKPOINT_DIR + "/dqn_checkpoint.pth"
-RESUME_TRAINING = False
+RESUME_CHECKPOINT = True
+RESUME_CLEAR_STEP = False
 RESUME_LOGDIR = "runs/dqn_experiment_20260409-200509"
+RESUME_BUFFER = True
 BUFFER_PATH = "replay_buffer.pkl"
 SAVE_INTERVAL = 20000
 # environment window behavior
@@ -268,7 +270,7 @@ def main():
     expected_buffer_frame_shape = (int(per_frame_channels), int(frame_h), int(frame_w))
 
     # TensorBoard Writer
-    if RESUME_TRAINING:
+    if RESUME_LOGDIR and os.path.exists(RESUME_LOGDIR):
         log_dir = RESUME_LOGDIR
     else:
         log_dir = f"runs/dqn_experiment_{time.strftime('%Y%m%d-%H%M%S')}"
@@ -282,7 +284,7 @@ def main():
     steps_done = 0
 
     # Load checkpoint if exists
-    if RESUME_TRAINING and os.path.exists(RESUME_CHECKPOINT_PATH):
+    if RESUME_CHECKPOINT and os.path.exists(RESUME_CHECKPOINT_PATH):
         print(f"Loading checkpoint from {RESUME_CHECKPOINT_PATH}")
         checkpoint = torch.load(RESUME_CHECKPOINT_PATH, weights_only=False)
         checkpoint_input_shape = tuple(checkpoint.get("model_input_shape", ()))
@@ -297,7 +299,7 @@ def main():
                 policy_net.load_state_dict(checkpoint["model_state_dict"])
                 target_net.load_state_dict(checkpoint["model_state_dict"])
                 optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-                steps_done = checkpoint.get("steps_done", 0)
+                steps_done = checkpoint.get("steps_done", 0) if not RESUME_CLEAR_STEP else 0
                 epsilon = compute_linear_epsilon(steps_done)
             except RuntimeError as e:
                 print(
@@ -305,7 +307,7 @@ def main():
                     f"Train from scratch. Error: {e}"
                 )
 
-    if RESUME_TRAINING:
+    if RESUME_BUFFER:
         if os.path.exists(BUFFER_PATH):
             print(f"Loading replay buffer from {BUFFER_PATH}")
             try:
