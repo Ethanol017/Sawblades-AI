@@ -533,6 +533,7 @@ def main():
 
                 obs, _ = env.reset()
                 episode_reward = 0
+                episode_score_reward = 0
                 episode_len = 0
         # Final save after training loop
         save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
