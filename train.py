@@ -439,11 +439,9 @@ def main():
 
                 optimizer.zero_grad()
                 loss.backward()
-
-                clipped_norm = torch.nn.utils.clip_grad_norm_(
-                    policy_net.parameters(), max_norm=MAX_GRAD_NORM
-                )
+                norm = torch.nn.utils.clip_grad_norm_(policy_net.parameters(), max_norm=MAX_GRAD_NORM)
                 optimizer.step()
+                
                 if USE_SOFT_UPDATE:
                     soft_update(target_net, policy_net, TAU)
 
@@ -456,9 +454,9 @@ def main():
                         "TD_Error/abs_mean", td_error.abs().mean().item(), step
                     )
                     writer.add_scalar("TD_Error/mean", td_error.mean().item(), step)
-                    writer.add_scalar("Grad/clipped_norm", float(clipped_norm), step)
+                    writer.add_scalar("Grad/norm", float(norm), step)
                     writer.add_scalar(
-                        "Grad/norm",
+                        "Grad/clipped_norm",
                         compute_grad_norm(policy_net.parameters(), GRAD_NORM_TYPE),
                         step,
                     )
