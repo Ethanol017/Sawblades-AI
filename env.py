@@ -168,6 +168,7 @@ class PcGameEnv(gym.Env):
         self._init_memory_reader()
         self.last_score = 0.0
         self.possible_get_score = False
+        self.possible_score_rewarded = False
 
         self.game_start_time = time.time()
 
@@ -461,6 +462,8 @@ class PcGameEnv(gym.Env):
         _upper = np.clip(_target + _tol, 0, 255).astype(np.uint8)
         _mask = cv2.inRange(_rgb, _lower, _upper)
         self.possible_get_score = bool(np.any(_mask))
+        if not self.possible_get_score:
+            self.possible_score_rewarded = False
 
         start_slice = img[
             rel_top : rel_top + START_CHECK_ROI["height"],
@@ -571,17 +574,21 @@ class PcGameEnv(gym.Env):
         reward = 0.0
         score_reward = 0.0
         score = self.get_score_from_memory()
-        if is_first_frame:
-            reward += REWARD_SURVIVAL + REWARD_SURVIVAL_PER_TIME * min(self.survival_step, 200)
-        
+
         if score > self.last_score:
             score_reward = (score - self.last_score) * REWARD_SCORE
             reward += score_reward
             self.last_score = score
             self.possible_get_score = False
+            self.possible_score_rewarded = False
 
-        if is_first_frame and self.possible_get_score:
-            reward += REWARD_POSSIBLE_SCORE
+        if is_first_frame:
+            reward += REWARD_SURVIVAL + REWARD_SURVIVAL_PER_TIME * min(
+                self.survival_step, 200
+            )
+            if self.possible_get_score and not self.possible_score_rewarded:
+                reward += REWARD_POSSIBLE_SCORE
+                self.possible_score_rewarded = True
 
         if status == "Dead":
             reward += REWARD_DEATH
@@ -635,6 +642,7 @@ class PcGameEnv(gym.Env):
         self.last_score = 0.0
         self.survival_step = 0
         self.possible_get_score = False
+        self.possible_score_rewarded = False
 
         self._release_all_keys()
 
