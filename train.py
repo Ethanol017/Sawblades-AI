@@ -20,7 +20,8 @@ GAMMA = 0.99
 EPSILON_START_STEPS = 15000  # 15k
 EPSILON_START = 1.0
 EPSILON_END = 0.02
-EPSILON_DECAY = 60000  # 60k
+EPSILON_DECAY_END_PERCENT = 60.0
+EPSILON_END_STEP = 500_000
 TRAIN_FREQ = 4
 MEMORY_CAPACITY = 50000  # 50k
 LEARNING_STARTS = 15000  # 15k
@@ -123,7 +124,7 @@ def soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
 
 def compute_linear_epsilon(step: int) -> float:
     decay_end_ratio = EPSILON_DECAY_END_PERCENT / 100.0
-    decay_end_step = max(1, int(MAX_STEPS * decay_end_ratio))
+    decay_end_step = max(1, int(EPSILON_END_STEP * decay_end_ratio))
     progress = min(max(step, 0), decay_end_step) / decay_end_step
     return EPSILON_START + (EPSILON_END - EPSILON_START) * progress
 
