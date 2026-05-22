@@ -143,18 +143,16 @@ class PcGameEnv(gym.Env):
         self.action_space = spaces.Discrete(6)
 
         # Each frame is uint8 (C,H,W) with two channels: gray + semantic mask.
-        self.observation_space = spaces.Box(
-            low=0, high=255, shape=(2, 84, 84), dtype=np.uint8
-        )
+        self.observation_space = spaces.Box(low=0, high=255, shape=(2, 84, 84), dtype=np.uint8)
 
         # 記錄當前按下的鍵，用於狀態機控制
         self.current_keys = {"left": False, "right": False, "space": False}
 
         # Action Repetition
         self.frame_skip = 4
-        
+
         self.survival_step = 0
-        
+
         if target_train_step_time_sec is None:
             self.target_train_step_time_sec = None
         else:
@@ -178,11 +176,7 @@ class PcGameEnv(gym.Env):
             self.game_window = windows[0]
             self.game_hwnd = int(getattr(self.game_window, "_hWnd", 0)) or None
             try:
-                if (
-                    not self.game_window.isMinimized
-                    and self.game_window.width > 0
-                    and self.game_window.height > 0
-                ):
+                if not self.game_window.isMinimized and self.game_window.width > 0 and self.game_window.height > 0:
                     self.capture_origin_x = int(self.game_window.left)
                     self.capture_origin_y = int(self.game_window.top)
             except Exception:
@@ -407,14 +401,10 @@ class PcGameEnv(gym.Env):
         obstacle_mask = np.zeros((h, w), dtype=np.uint8)
 
         for color in PLAYER_COLORS_RGB:
-            player_mask = cv2.bitwise_or(
-                player_mask, self._color_mask(rgb_img, color, COLOR_TOLERANCE)
-            )
+            player_mask = cv2.bitwise_or(player_mask, self._color_mask(rgb_img, color, COLOR_TOLERANCE))
 
         for color in OBSTACLE_COLORS_RGB:
-            obstacle_mask = cv2.bitwise_or(
-                obstacle_mask, self._color_mask(rgb_img, color, COLOR_TOLERANCE)
-            )
+            obstacle_mask = cv2.bitwise_or(obstacle_mask, self._color_mask(rgb_img, color, COLOR_TOLERANCE))
 
         semantic_mask = np.zeros((h, w), dtype=np.uint8)
         semantic_mask[obstacle_mask > 0] = OBSTACLE_MASK_VALUE
@@ -434,9 +424,7 @@ class PcGameEnv(gym.Env):
         semantic_mask = self._build_semantic_mask(rgb)
 
         gray_resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        mask_resized = cv2.resize(
-            semantic_mask, (84, 84), interpolation=cv2.INTER_NEAREST
-        )
+        mask_resized = cv2.resize(semantic_mask, (84, 84), interpolation=cv2.INTER_NEAREST)
         obs = np.stack([gray_resized, mask_resized], axis=0)
         return obs.astype(np.uint8)
 
@@ -483,11 +471,7 @@ class PcGameEnv(gym.Env):
         avg_g = np.mean(slice_rgb[:, :, 1])
         avg_b = np.mean(slice_rgb[:, :, 2])
 
-        if (
-            avg_r > RED_THRESHOLD["r_min"]
-            and avg_g < RED_THRESHOLD["g_max"]
-            and avg_b < RED_THRESHOLD["b_max"]
-        ):
+        if avg_r > RED_THRESHOLD["r_min"] and avg_g < RED_THRESHOLD["g_max"] and avg_b < RED_THRESHOLD["b_max"]:
             status = "Dead"
         elif avg_start > WHITE_THRESHOLD:
             status = "Playing"
@@ -538,9 +522,7 @@ class PcGameEnv(gym.Env):
         """初始化 pymem 並設定指針路徑"""
         try:
             self.pm = pymem.Pymem(SCORE_PROCESS_NAME)
-            self.game_module = pymem.process.module_from_name(
-                self.pm.process_handle, SCORE_PROCESS_NAME
-            ).lpBaseOfDll
+            self.game_module = pymem.process.module_from_name(self.pm.process_handle, SCORE_PROCESS_NAME).lpBaseOfDll
         except Exception as e:
             print(f"記憶體讀取初始化失敗: {e}")
             self.pm = None
@@ -560,7 +542,7 @@ class PcGameEnv(gym.Env):
         except Exception:
             return 0
 
-    def _calculate_reward(self, status , is_first_frame):
+    def _calculate_reward(self, status, is_first_frame):
         """
         計算本 step 的 reward，包含生存獎勵、分數獎勵、可能得分獎勵、死亡懲罰等。
         Args:
@@ -570,7 +552,7 @@ class PcGameEnv(gym.Env):
             reward (float): The total reward for this step.
             score_reward (float): The portion of the reward that comes from scoring, for info logging.
         """
-        
+
         reward = 0.0
         score_reward = 0.0
         score = self.get_score_from_memory()
@@ -583,9 +565,7 @@ class PcGameEnv(gym.Env):
             self.possible_score_rewarded = False
 
         if is_first_frame:
-            reward += REWARD_SURVIVAL + REWARD_SURVIVAL_PER_TIME * min(
-                self.survival_step, 200
-            )
+            reward += REWARD_SURVIVAL + REWARD_SURVIVAL_PER_TIME * min(self.survival_step, 200)
             if self.possible_get_score and not self.possible_score_rewarded:
                 reward += REWARD_POSSIBLE_SCORE
                 self.possible_score_rewarded = True
@@ -593,7 +573,7 @@ class PcGameEnv(gym.Env):
         if status == "Dead":
             reward += REWARD_DEATH
 
-        return reward , score_reward
+        return reward, score_reward
 
     def step(self, action):
         self.survival_step += 1
@@ -608,9 +588,7 @@ class PcGameEnv(gym.Env):
             try:
                 sct_img = self._grab(GAME_ROI)
             except RuntimeError as e:
-                raise RuntimeError(
-                    f"Capture failed in step(action={action}, frame_idx={frame_idx}): {e}"
-                )
+                raise RuntimeError(f"Capture failed in step(action={action}, frame_idx={frame_idx}): {e}")
 
             status = self._check_game_status(sct_img)
             terminated = status == "Dead"
@@ -621,7 +599,7 @@ class PcGameEnv(gym.Env):
             # img = np.array(sct_img)
             # cv2.imwrite(f"debug_picture/debug_game_over{int(time.time())}.png", img)
 
-            step_reward , score_reward = self._calculate_reward(status, frame_idx == 0)
+            step_reward, score_reward = self._calculate_reward(status, frame_idx == 0)
             total_reward += step_reward
             total_score_reward += score_reward
 
@@ -667,9 +645,7 @@ class PcGameEnv(gym.Env):
 
             if time.time() - self.game_start_time > 1.0:
                 retry_count += 1
-                print(
-                    f"Reset timeout (Status: {status}), retrying Enter... ({retry_count}/{MAX_RESET_RETRIES})"
-                )
+                print(f"Reset timeout (Status: {status}), retrying Enter... ({retry_count}/{MAX_RESET_RETRIES})")
                 if retry_count >= MAX_RESET_RETRIES:
                     raise RuntimeError(
                         self._build_capture_debug_message(
@@ -705,7 +681,7 @@ if __name__ == "__main__":
     obs, info = env.reset()
     for _ in range(400):
         action = env.action_space.sample()
-        obs, reward, terminated, truncated, info = env.step(0) # 0 is for human testing
+        obs, reward, terminated, truncated, info = env.step(0)  # 0 is for human testing
         # save obs to image file for debugging; only need one image.
         debug_img = np.concatenate([obs[0], obs[1]], axis=1)
         cv2.imwrite("debug_picture/debug_obs.png", debug_img)

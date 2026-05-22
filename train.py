@@ -11,7 +11,6 @@ import time
 from env import PcGameEnv
 from utils.replay_buffer import ReplayBuffer
 
-
 # --- Hyperparameters ---
 MAX_STEPS = 100000  # 100k baseline
 BATCH_SIZE = 64
@@ -50,6 +49,7 @@ HIST_INTERVAL = 1000
 GRAD_NORM_TYPE = 2.0
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class DQN(nn.Module):
     def __init__(self, input_shape, num_actions):
@@ -190,6 +190,7 @@ def load_replay_buffer(
 
     return loaded_buffer
 
+
 def sanitize_replay_buffer_actions(buffer: ReplayBuffer, num_actions: int) -> int:
     if buffer.action is None or buffer.num_in_buffer <= 0:
         return 0
@@ -200,6 +201,7 @@ def sanitize_replay_buffer_actions(buffer: ReplayBuffer, num_actions: int) -> in
     if invalid_count > 0:
         used_actions[invalid_mask] = 0
     return invalid_count
+
 
 def save_checkpoint(
     model: nn.Module,
@@ -221,6 +223,7 @@ def save_checkpoint(
         },
         CHECKPOINT_PATH + f"_{step}.pth",
     )
+
 
 def main():
     try:
@@ -255,9 +258,7 @@ def main():
         int(frame_h),
         int(frame_w),
     )
-    print(
-        f"Observation shape from env: {obs_shape}, model input shape: {model_input_shape}"
-    )
+    print(f"Observation shape from env: {obs_shape}, model input shape: {model_input_shape}")
 
     # Initialize Networks
     policy_net = DQN(model_input_shape, env.action_space.n).to(device)
@@ -284,7 +285,9 @@ def main():
 
         with torch.no_grad():
             next_actions = policy_net(next_obs_batch).argmax(1)
-            next_q_values = target_net(next_obs_batch).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+            next_q_values = (
+                target_net(next_obs_batch).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+            )
             expected_q_values = rew_batch + GAMMA * next_q_values * (1 - done_batch)
 
         td_error = q_values - expected_q_values
@@ -313,7 +316,9 @@ def main():
 
         if train_step % HIST_INTERVAL == 0:
             writer.add_histogram("TD_Error/td_error", td_error.detach().cpu().numpy(), train_step)
-            writer.add_histogram("Action/batch_actions", act_batch.detach().cpu().numpy(), train_step)
+            writer.add_histogram(
+                "Action/batch_actions", act_batch.detach().cpu().numpy(), train_step
+            )
 
     def flush_pending_training(train_step: int) -> int:
         nonlocal pending_train_updates
@@ -381,23 +386,17 @@ def main():
                     expected_frame_history_len=FRAMES_STACK,
                 )
                 print(f"Replay buffer restored (size={len(buffer)})")
-                invalid_action_count = sanitize_replay_buffer_actions(
-                    buffer, env.action_space.n
-                )
+                invalid_action_count = sanitize_replay_buffer_actions(buffer, env.action_space.n)
                 if invalid_action_count > 0:
                     print(
                         "Replay buffer had invalid actions and was sanitized "
                         f"(count={invalid_action_count}, action_space_n={env.action_space.n})."
                     )
             except Exception as e:
-                print(
-                    "Replay buffer load failed, start with empty buffer. " f"Error: {e}"
-                )
+                print("Replay buffer load failed, start with empty buffer. " f"Error: {e}")
                 buffer = ReplayBuffer(MEMORY_CAPACITY, FRAMES_STACK)
         else:
-            print(
-                f"RESUME_TRAINING=True but {BUFFER_PATH} not found, start with empty buffer."
-            )
+            print(f"RESUME_TRAINING=True but {BUFFER_PATH} not found, start with empty buffer.")
 
     print("Starting training...")
     obs, _ = env.reset()
@@ -429,10 +428,7 @@ def main():
             if random.random() > epsilon:
                 with torch.no_grad():
                     state_tensor = (
-                        torch.from_numpy(recent_observations)
-                        .unsqueeze(0)
-                        .float()
-                        .to(device)
+                        torch.from_numpy(recent_observations).unsqueeze(0).float().to(device)
                         / 255.0
                     )
                     q_value = policy_net(state_tensor)
@@ -499,9 +495,7 @@ def main():
             step_sleep = max(0.0, step_time - step_time_raw)
             step_wait_overshoot = max(0.0, step_sleep - ideal_sleep)
             step_over_target = (
-                max(0.0, step_time - target_step_time)
-                if target_step_time is not None
-                else 0.0
+                max(0.0, step_time - target_step_time) if target_step_time is not None else 0.0
             )
             writer.add_scalar("Time/step_time", step_time, step)
             writer.add_scalar("Time/step_time_raw", step_time_raw, step)
@@ -516,16 +510,12 @@ def main():
             if step % SAVE_INTERVAL == 0:
                 need_save = True
             if terminated or truncated:
-                print(
-                    f"Step: {step}, Episode Reward: {episode_reward:.2f}, Epsilon: {epsilon:.2f}"
-                )
+                print(f"Step: {step}, Episode Reward: {episode_reward:.2f}, Epsilon: {epsilon:.2f}")
                 writer.add_scalar("Reward/episode", episode_reward, step)
                 writer.add_scalar("Reward/episode_score", episode_score_reward, step)
                 writer.add_scalar("Episode/len", episode_len, step)
                 if episode_len > 0:
-                    writer.add_scalar(
-                        "Reward/per_step", episode_reward / episode_len, step
-                    )
+                    writer.add_scalar("Reward/per_step", episode_reward / episode_len, step)
                 # writer.add_scalar('Score/episode', info.get('score', 0), step)
 
                 if pending_train_updates > 0:
@@ -533,7 +523,14 @@ def main():
 
                 if need_save:
                     need_save = False
-                    save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
+                    save_checkpoint(
+                        policy_net,
+                        optimizer,
+                        step,
+                        epsilon,
+                        model_input_shape,
+                        per_frame_channels,
+                    )
                     save_replay_buffer(buffer, BUFFER_PATH)
 
                 obs, _ = env.reset()
