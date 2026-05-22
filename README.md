@@ -1,3 +1,7 @@
+
+
+
+
 # Sawblades AI
 
 基於強化學習 (Reinforcement Learning) 的實作專案，訓練 AI 在真實遊戲《A Slight Chance of Sawblades》中進行遊玩。
@@ -11,12 +15,10 @@
 - **克服實時遊戲的時間波動**：為了避免模型產生多餘的時間雜訊，將不固定的遊戲時長強制加入了穩定間隔等待，並且把模型訓練與梯度更新推移至每一次「遊戲回合結束後」統一進行。
 - **獎勵設計**：除了單純的得分與死亡，藉由遊戲機制設計了「可能得分」的輔助獎勵狀態，用以解決獎勵過於稀疏的問題。
 
-## 視覺表現
+## 遊戲實機遊玩
+https://github.com/user-attachments/assets/863aff07-8a62-4cee-a550-119dea1bf960
 
-### 遊戲實機遊玩
-
-
-### 模型架構
+## 模型架構
 ![DQN_architecture](assets/DQN_architecture.png)
 
 ## 檔案結構
