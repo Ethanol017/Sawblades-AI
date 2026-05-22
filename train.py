@@ -329,7 +329,12 @@ def main():
         return updates_to_run
 
     # TensorBoard Writer
-    if RESUME_LOGDIR and os.path.exists(RESUME_LOGDIR):
+    if (
+        RESUME_CHECKPOINT
+        and not RESUME_CLEAR_STEP
+        and RESUME_LOGDIR
+        and os.path.exists(RESUME_LOGDIR)
+    ):
         log_dir = RESUME_LOGDIR
     else:
         log_dir = f"runs/dqn_experiment_{time.strftime('%Y%m%d-%H%M%S')}"
