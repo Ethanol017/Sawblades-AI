@@ -269,6 +269,64 @@ def main():
     optimizer = optim.Adam(policy_net.parameters(), lr=LR)
     buffer = ReplayBuffer(MEMORY_CAPACITY, FRAMES_STACK)
     expected_buffer_frame_shape = (int(per_frame_channels), int(frame_h), int(frame_w))
+    pending_train_updates = 0
+
+    def train_one_update(train_step: int) -> None:
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = buffer.sample(BATCH_SIZE)
+
+        obs_batch = torch.from_numpy(obs_batch).float().to(device) / 255.0
+        act_batch = torch.from_numpy(act_batch).long().to(device)
+        rew_batch = torch.from_numpy(rew_batch).to(device)
+        next_obs_batch = torch.from_numpy(next_obs_batch).float().to(device) / 255.0
+        done_batch = torch.from_numpy(done_batch).to(device)
+
+        q_values = policy_net(obs_batch).gather(1, act_batch.unsqueeze(1)).squeeze(1)
+
+        with torch.no_grad():
+            next_actions = policy_net(next_obs_batch).argmax(1)
+            next_q_values = target_net(next_obs_batch).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+            expected_q_values = rew_batch + GAMMA * next_q_values * (1 - done_batch)
+
+        td_error = q_values - expected_q_values
+        loss = F.smooth_l1_loss(q_values, expected_q_values)
+
+        optimizer.zero_grad()
+        loss.backward()
+        norm = torch.nn.utils.clip_grad_norm_(policy_net.parameters(), max_norm=MAX_GRAD_NORM)
+        optimizer.step()
+
+        if USE_SOFT_UPDATE:
+            soft_update(target_net, policy_net, TAU)
+
+        if train_step % 10 == 0:
+            writer.add_scalar("Loss/train", loss.item(), train_step)
+
+        if train_step % LOG_INTERVAL == 0:
+            writer.add_scalar("TD_Error/abs_mean", td_error.abs().mean().item(), train_step)
+            writer.add_scalar("TD_Error/mean", td_error.mean().item(), train_step)
+            pre_clip_grad_norm = float(norm)
+            post_clip_grad_norm = compute_grad_norm(policy_net.parameters(), GRAD_NORM_TYPE)
+            writer.add_scalar("Grad/pre_clip_norm", pre_clip_grad_norm, train_step)
+            writer.add_scalar("Grad/post_clip_norm", post_clip_grad_norm, train_step)
+            writer.add_scalar("Grad/norm", pre_clip_grad_norm, train_step)
+            writer.add_scalar("Grad/clipped_norm", post_clip_grad_norm, train_step)
+
+        if train_step % HIST_INTERVAL == 0:
+            writer.add_histogram("TD_Error/td_error", td_error.detach().cpu().numpy(), train_step)
+            writer.add_histogram("Action/batch_actions", act_batch.detach().cpu().numpy(), train_step)
+
+    def flush_pending_training(train_step: int) -> int:
+        nonlocal pending_train_updates
+
+        updates_to_run = pending_train_updates
+        if updates_to_run <= 0:
+            return 0
+
+        for _ in range(updates_to_run):
+            train_one_update(train_step)
+            pending_train_updates -= 1
+
+        return updates_to_run
 
     # TensorBoard Writer
     if RESUME_LOGDIR and os.path.exists(RESUME_LOGDIR):
@@ -401,74 +459,14 @@ def main():
 
             obs = next_obs
 
-            # 4. Train
+            # 4. Queue train updates for episode-end flush
             can_train = (
                 buffer.can_sample(BATCH_SIZE)
                 and (step >= LEARNING_STARTS)
                 and (step % TRAIN_FREQ == 0)
             )
             if can_train:
-                obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = (
-                    buffer.sample(BATCH_SIZE)
-                )
-                
-                obs_batch = torch.from_numpy(obs_batch).float().to(device) / 255.0
-                act_batch = torch.from_numpy(act_batch).long().to(device)
-                rew_batch = torch.from_numpy(rew_batch).to(device)
-                next_obs_batch = (
-                    torch.from_numpy(next_obs_batch).float().to(device) / 255.0
-                )
-                done_batch = torch.from_numpy(done_batch).to(device)
-
-                q_values = (
-                    policy_net(obs_batch).gather(1, act_batch.unsqueeze(1)).squeeze(1)
-                )
-
-                with torch.no_grad():
-                    next_actions = policy_net(next_obs_batch).argmax(1)
-                    next_q_values = (
-                        target_net(next_obs_batch)
-                        .gather(1, next_actions.unsqueeze(1))
-                        .squeeze(1)
-                    )
-                    expected_q_values = rew_batch + GAMMA * next_q_values * (
-                        1 - done_batch
-                    )
-
-                td_error = q_values - expected_q_values  # TD Error for logging
-                loss = F.smooth_l1_loss(q_values, expected_q_values)
-
-                optimizer.zero_grad()
-                loss.backward()
-                norm = torch.nn.utils.clip_grad_norm_(policy_net.parameters(), max_norm=MAX_GRAD_NORM)
-                optimizer.step()
-                
-                if USE_SOFT_UPDATE:
-                    soft_update(target_net, policy_net, TAU)
-
-                # Log Loss
-                if step % 10 == 0:
-                    writer.add_scalar("Loss/train", loss.item(), step)
-
-                if step % LOG_INTERVAL == 0:
-                    writer.add_scalar(
-                        "TD_Error/abs_mean", td_error.abs().mean().item(), step
-                    )
-                    writer.add_scalar("TD_Error/mean", td_error.mean().item(), step)
-                    writer.add_scalar("Grad/norm", float(norm), step)
-                    writer.add_scalar(
-                        "Grad/clipped_norm",
-                        compute_grad_norm(policy_net.parameters(), GRAD_NORM_TYPE),
-                        step,
-                    )
-
-                if step % HIST_INTERVAL == 0:
-                    writer.add_histogram(
-                        "TD_Error/td_error", td_error.detach().cpu().numpy(), step
-                    )
-                    writer.add_histogram(
-                        "Action/batch_actions", act_batch.detach().cpu().numpy(), step
-                    )
+                pending_train_updates += 1
 
             # Update Epsilon (Linear Decay)
             epsilon = compute_linear_epsilon(step)
@@ -525,6 +523,9 @@ def main():
                     )
                 # writer.add_scalar('Score/episode', info.get('score', 0), step)
 
+                if pending_train_updates > 0:
+                    flush_pending_training(step)
+
                 if need_save:
                     need_save = False
                     save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
@@ -535,10 +536,21 @@ def main():
                 episode_score_reward = 0
                 episode_len = 0
         # Final save after training loop
+        if pending_train_updates > 0:
+            print(f"Flushing {pending_train_updates} deferred train updates before final save...")
+            flush_pending_training(step)
         save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
 
     except KeyboardInterrupt:
         print("Training interrupted. Saving checkpoint and replay buffer...")
+        if pending_train_updates > 0:
+            try:
+                print(
+                    f"Flushing {pending_train_updates} deferred train updates before interrupt save..."
+                )
+                flush_pending_training(step)
+            except Exception as flush_error:
+                print(f"Deferred training flush failed during interrupt: {flush_error}")
         save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
         save_replay_buffer(buffer, BUFFER_PATH)
         writer.close()
@@ -546,6 +558,14 @@ def main():
     except Exception as e:
         print(f"An error occurred: {e}")
         print("Saving checkpoint and replay buffer before exit...")
+        if pending_train_updates > 0:
+            try:
+                print(
+                    f"Flushing {pending_train_updates} deferred train updates before exception save..."
+                )
+                flush_pending_training(step)
+            except Exception as flush_error:
+                print(f"Deferred training flush failed during exception save: {flush_error}")
         save_checkpoint(policy_net, optimizer, step, epsilon, model_input_shape, per_frame_channels)
         save_replay_buffer(buffer, BUFFER_PATH)
         writer.close()
