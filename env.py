@@ -598,6 +598,7 @@ class PcGameEnv(gym.Env):
     def step(self, action):
         self.survival_step += 1
         total_reward = 0
+        total_score_reward = 0.0
         terminated = False
         truncated = False
 
@@ -622,6 +623,7 @@ class PcGameEnv(gym.Env):
 
             step_reward , score_reward = self._calculate_reward(status, frame_idx == 0)
             total_reward += step_reward
+            total_score_reward += score_reward
 
             # time.sleep(0.004)
 
@@ -629,7 +631,7 @@ class PcGameEnv(gym.Env):
                 break
 
         obs = self._process_obs(sct_img)
-        return obs, total_reward, terminated, truncated, {"score_reward": score_reward}
+        return obs, total_reward, terminated, truncated, {"score_reward": total_score_reward}
 
     def _release_all_keys(self):
         self._key_up("left")
